@@ -142,15 +142,23 @@ def remove_garbage_rows(in_csv_path, out_csv_folder):
 
 def create_lines(dataframe, longitude_column, latitude_column, unique_column, input_epsg, output_epsg):
 	"""
+	takes as input a pandas data_frame object (this may change in the future to a file path) and converts 
+	the data frame into unique transects (this is also most likely to change) and writes them out as a
+	line shapefile.  
 
-	do something here to create the needed input to create a linestring
-		using shapely from the pandas data_frame
-		--> we can deal with the creation of an acceptable dbf to attach to
-		the lines following the generation of the density maps
+	arguments:
+		dataframe - a pandas dataframe object created from a cleaned / joined / dropped ExactEarth CSV file
+		longitude_column - string name of the column to be used to determine longitude.
+		latitude_column - string name of the column to be used to determin latitude
+		unique_column - string column name to be used to determine the a unique ship transect
+		input_epsg - integer representation of the epsg code of the input file reference system
+		output_epsg - integer representation of the epsg code of the output file reference system
 
-		Dont forget about removing less than 2 element lines!
-
-		returns a tuple of lines and a dataframe of values for the lines
+	depends:
+		pandas, shapely, pyproj
+	
+	returns:
+		a tuple of lines (shapely) and a dataframe (pandas) of the values for the lines in that order
 
 	"""
 	
