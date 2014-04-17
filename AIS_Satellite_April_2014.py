@@ -1,15 +1,6 @@
 # a new way forward with working with the AIS Satellite Data from ExactEarth
-# some other initial steps included:
-# 1. accessing and downloading the data
-# 2. extracting the individual files from the compressed archives
-# 3. spend a copius amount of time fussing with the data to find best ways of working with it
-
 # bring in some of the libs we will need:
-# import shapely
-# from shapely.geometry import *
-# import fiona
-# from fiona import collection
-# from fiona.crs import from_epsg
+
 import fiona
 import numpy as np
 import os, sys, re, time, glob, shapefile, shutil, csv, StringIO
@@ -58,7 +49,6 @@ def setup_dirs(output_base_path):
 	os.mkdir(os.path.join(base_path, 'csv', 'cleaned'))
 	os.mkdir(os.path.join(base_path, 'csv', 'joined'))
 	os.mkdir(os.path.join(base_path, 'csv', 'grouped'))
-	# os.mkdir(os.path.join(base_path, 'csv', 'modified'))
 	os.mkdir(os.path.join(base_path, 'csv', 'dropped'))
 	os.mkdir(os.path.join(base_path, 'lines'))
 	os.mkdir(os.path.join(base_path, 'lines', 'individual_shapefiles'))
@@ -72,7 +62,27 @@ def setup_dirs(output_base_path):
 
 
 def remove_garbage_rows(in_csv_path, out_csv_folder):
-	# open and write out new clean and trash files
+	"""
+	arguments: 
+	in_csv_path = path to a csv file (not an open file object)
+	out_csv_folder = path to the base output folder to put the outputs
+
+	takes as input an exactearth data dump csv file and will remove all of the 
+	'dirty' data.  It removes the data based on a few simple criteria that make sense
+	for the purposes of the data needs of the ABSI Risk Assessment.
+
+	In order for a row to be deemed clean:
+	1. length of row fields must match the number of header column names
+	2. MMSI must be able to be coerced to an integer value
+	3. Latitude and Longitude must be able to be coerced to float values
+	4. Time must be able to be split on the '_', rejoined with a '.' 
+		and able to be coerced to a float.
+
+	if a row passes all of the above criteria tests it is written into a 'clean' file, 
+	and if it does not it is written to a 'dirty' file.
+
+
+	"""
 	clean_file = open( os.path.join( out_csv_folder, os.path.basename( in_csv_path ).replace('.csv', '_clean.csv') ), 'w' )
 	trash_file = open( os.path.join( out_csv_folder, os.path.basename( in_csv_path ).replace('.csv', '_dirty.csv') ), 'w' )
 
@@ -109,42 +119,28 @@ def remove_garbage_rows(in_csv_path, out_csv_folder):
 	return os.path.join(out_csv_folder, os.path.basename(in_csv_path).replace('.csv', '_clean.csv'))
 
 
-def pandas_clean_csv(in_csv_path, output_path, column_list):
-	# read in the csv with a column subset
-	reader = pd.read_csv(in_csv_path, usecols=column_list)
-	# convert our needed rows to their proper dtypes
-	# reader['Longitude'] = reader['Longitude'].astype(float)
-	# reader['Latitude'] = reader['Longitude'].astype(float)
-	# reader['MMSI'] = reader['Longitude'].astype(int)
-	# remove useless rows
-	reader = reader.dropna(axis=0, how='any', subset=['Longitude', 'Latitude', 'MMSI', 'Time'] )
-	# write out csv to a cleaned version
-	reader.to_csv(output_path, mode='w', header=True, index=False)
-	reader = None
-	del reader
+
+# def create_lines(dataframe, longitude_column, latitude_column, unique_column):
+# 	"""
+# 	do something here to create the needed input to create a linestring
+# 		using shapely from the pandas data_frame
+# 		--> we can deal with the creation of an acceptable dbf to attach to
+# 		the lines following the generation of the density maps
+
+# 		Dont forget about removing less than 2 element lines!
+# 	"""
+# 	out_lines = []
+# 	trip_list = [dataframe[dataframe[unique_column] == i] for i in dataframe[unique_column].unique()]
+# 	for trip in trip_list:
+# 		trip = np.unique(trip['Time'])
+# 		lonlat = trip[[longitude_column, latitude_column]]
+# 		cur_line = [(float(i[1][longitude_column]), float(i[1][latitude_column])) for i in lonlat.iterrows()]
+# 		if len(cur_line) > 2:
+# 			out_lines.append( LineString( cur_line ) )
+# 	return out_lines
 
 
-def create_lines(dataframe, longitude_column, latitude_column, unique_column):
-	"""
-	do something here to create the needed input to create a linestring
-		using shapely from the pandas data_frame
-		--> we can deal with the creation of an acceptable dbf to attach to
-		the lines following the generation of the density maps
-
-		Dont forget about removing less than 2 element lines!
-	"""
-	out_lines = []
-	trip_list = [dataframe[dataframe[unique_column] == i] for i in dataframe[unique_column].unique()]
-	for trip in trip_list:
-		trip = np.unique(trip['Time'])
-		lonlat = trip[[longitude_column, latitude_column]]
-		cur_line = [(float(i[1][longitude_column]), float(i[1][latitude_column])) for i in lonlat.iterrows()]
-		if len(cur_line) > 2:
-			out_lines.append( LineString( cur_line ) )
-	return out_lines
-
-
-def create_lines2(dataframe, longitude_column, latitude_column, unique_column, input_epsg, output_epsg):
+def create_lines(dataframe, longitude_column, latitude_column, unique_column, input_epsg, output_epsg):
 	"""
 
 	do something here to create the needed input to create a linestring
@@ -182,7 +178,22 @@ def create_lines2(dataframe, longitude_column, latitude_column, unique_column, i
 
 def csv_to_shape(in_csv, out_shape, month=None, output_epsg=3338, input_epsg=4326, col_dtypes=None):
 	"""
-	convert to csv to a shapefile
+	convert a cleaned ExactEarth csv file and generate point shapefiles data.
+
+	arguments:
+	1. in_csv - a path to a csv file to be converted to a points shapefile
+	2. out_shape - filename (with path) of the desired output shapefile
+	3. month - an individual month integer between 1 and 12 to break the data
+		into some more interesting subsets for seasonal visualizations.
+	4. output_epsg - an accepted integer EPSG code for the output reference system
+	5. input_epsg - an accepted integer EPSG code for the input reference system
+
+	This function will take the points in the native reference system and output them 
+	as a newly projected system.  In the case of this work, it has involved input_epsg of 4326
+	and an output epsg of 3338.  These are the programmed defaults.
+
+	depends:
+	pyproj, fiona(ogr), shapely, shapefile
 
 	"""
 	from pyproj import Proj
@@ -236,9 +247,19 @@ def csv_to_shape(in_csv, out_shape, month=None, output_epsg=3338, input_epsg=432
 def drop_fields(in_csv, output_path, column_list):
 	"""
 
-	this function will take as input the path to a csv file
+	this function takes as input, the path to a csv file
 	and a list of column names to keep from that file and will 
 	write out a version of the file with only those columns named.
+
+	arguments: 
+	in_csv - path to a cleaned and joined (with IHS table) csv file
+	output_path - a string of the output folder to put the outputs
+	column_list - a python list of strings of filenames to keep.  This uses the 
+	pandas dataframe read_csv with the usecols argument and writes it back out
+	with the subset of columns retained.
+
+	depends:
+	pandas
 
 	"""
 	import pandas as pd
@@ -436,7 +457,7 @@ for f in files:
 			print(' creating lines @ ' + time.asctime())
 
 			# create lines and output dataframe
-			lines, out_df = create_lines2(cur_df, 'Longitude', 'Latitude', 'unique_trips', 4326, 3338)
+			lines, out_df = create_lines(cur_df, 'Longitude', 'Latitude', 'unique_trips', 4326, 3338)
 
 			# take the newly created lines layer and join it with the data frame that has been 
 			#  modified to have one record per unique line set. Write that out as a shapefile for distribution
