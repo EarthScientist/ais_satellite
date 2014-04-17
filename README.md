@@ -1,6 +1,5 @@
 ##Satellite AIS Data Parsing
 =============
-
 ###This script takes as input a set of ExactEarth AIS csv files and will:
 
 1. cleans the data following some basic criteria and outputs both clean data files and dirty data files 
